@@ -138,25 +138,18 @@ async def chat_endpoint(payload: ChatRequest):
     print("="*50)
     
     async def event_generator():
-        # 1. 1차 통합 질문 분석 (의도 분류 및 검색어 확장) 기동
-        yield json.dumps({"type": "log", "message": "🛡️ [1단계] 통합 질문 분석 가동: 의도 분류 및 검색어 확장 분석 중..."}) + "\n"
-        await asyncio.sleep(0.05)
-        
         analysis = guardrail_agent.analyze_query(query, history)
         category = analysis.get("category", "law_ruling")
         expanded_query = analysis.get("expanded_query", query)
         
-        yield json.dumps({"type": "log", "message": f"✅ [분석 완료] 카테고리: '{category}' 도메인 검색 및 쿼리 확장이 완료되었습니다."}) + "\n"
-        await asyncio.sleep(0.05)
-        
         # BM25 + Chroma DB v4 하이브리드 조회
-        yield json.dumps({"type": "log", "message": "📊 [2단계] BM25(Sparse) + Chroma(Dense) 하이브리드 검색 기동..."}) + "\n"
+        yield json.dumps({"type": "log", "message": "📊 [1단계] BM25(Sparse) + Chroma(Dense) 하이브리드 검색 기동..."}) + "\n"
         raw_results = vector_db.search_hybrid(expanded_query, k=10, category=category)
         yield json.dumps({"type": "log", "message": f"🔎 [검색 완료] 관련 후보 조항 및 판례 {len(raw_results)}건을 추출했습니다."}) + "\n"
         await asyncio.sleep(0.05)
         
-        # 3차 방어막: 관련성 필터링
-        yield json.dumps({"type": "log", "message": "🛡️ [3단계] 3차 방어막 가동: 유사도 검증 및 노이즈 필터링 중..."}) + "\n"
+        # 2단계: 유사도 검증 및 노이즈 필터링
+        yield json.dumps({"type": "log", "message": "🛡️ [2단계] 유사도 검증 및 노이즈 필터링 중..."}) + "\n"
         filtered_docs = guardrail_agent.filter_references(raw_results)
         
         if filtered_docs:
@@ -165,8 +158,8 @@ async def chat_endpoint(payload: ChatRequest):
             yield json.dumps({"type": "log", "message": "⚠️ [주의] 검색된 내용 중 질문과 연관성이 높은 법률 근거가 존재하지 않습니다."}) + "\n"
         await asyncio.sleep(0.05)
             
-        # 2차 방어막: 답변 생성
-        yield json.dumps({"type": "log", "message": "✍️ [4단계] 2차 방어막 가동: 인용 출처 매핑 및 AI 법률 답변 생성 중..."}) + "\n"
+        # 3단계: 답변 생성
+        yield json.dumps({"type": "log", "message": "✍️ [3단계] 인용 출처 매핑 및 AI 법률 답변 생성 중..."}) + "\n"
         result = llm_agent.answer_question(query, filtered_docs, history, is_search_required=True)
         
         was_blocked = result["answer"] == llm_agent.standard_refusal

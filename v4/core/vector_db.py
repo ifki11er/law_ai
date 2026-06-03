@@ -422,8 +422,9 @@ class LegalVectorDB:
         t0 = time.time()
         print("[디버그] 1단계: Chroma Dense 검색 시작...")
         filter_dict = {}
-        if category:
-            filter_dict["category"] = category
+        # [v4+ 수정] 카테고리 필터링 완전 무시/제거 (전체 통합 검색)
+        # if category:
+        #     filter_dict["category"] = category
             
         try:
              dense_raw = self.db.similarity_search_with_score(
@@ -458,10 +459,11 @@ class LegalVectorDB:
                   
                   top_indices = np.argsort(scores)[::-1]
                   
+                  # [v4+ 수정] 카테고리 필터링 완전 무시/제거 (전체 통합 검색)
                   # Find category index if filter applied
-                  filter_cat_idx = None
-                  if category and category in category_list:
-                      filter_cat_idx = category_list.index(category)
+                  # filter_cat_idx = None
+                  # if category and category in category_list:
+                  #     filter_cat_idx = category_list.index(category)
                   
                   # Phase 1: Retrieve top candidate indexes
                   candidates = []
@@ -470,9 +472,9 @@ class LegalVectorDB:
                           break
                       if scores[idx] > 0:
                           # Category filter
-                          if category:
-                              if filter_cat_idx is None or categories_idx[idx] != filter_cat_idx:
-                                  continue
+                          # if category:
+                          #     if filter_cat_idx is None or categories_idx[idx] != filter_cat_idx:
+                          #         continue
                           # Active filter
                           if not is_active[idx]:
                               continue
@@ -662,8 +664,9 @@ class LegalVectorDB:
         seen_parents = {}
         
         filter_dict = {}
-        if category:
-            filter_dict["category"] = category
+        # [v4+ 수정] 카테고리 필터링 완전 무시/제거 (전체 통합 검색)
+        # if category:
+        #     filter_dict["category"] = category
         if not include_inactive:
             filter_dict["is_active"] = True
             
@@ -706,9 +709,10 @@ class LegalVectorDB:
                 
                 top_indices = np.argsort(scores)[::-1]
                 
-                filter_cat_idx = None
-                if category and category in category_list:
-                    filter_cat_idx = category_list.index(category)
+                # [v4+ 수정] 카테고리 필터링 완전 무시/제거 (전체 통합 검색)
+                # filter_cat_idx = None
+                # if category and category in category_list:
+                #     filter_cat_idx = category_list.index(category)
                 
                 candidates = []
                 for idx in top_indices:
@@ -716,9 +720,9 @@ class LegalVectorDB:
                         break
                     if scores[idx] > 0:
                         # Category filter
-                        if category:
-                            if filter_cat_idx is None or categories_idx[idx] != filter_cat_idx:
-                                continue
+                        # if category:
+                        #     if filter_cat_idx is None or categories_idx[idx] != filter_cat_idx:
+                        #         continue
                         # Active filter
                         is_active = bool(is_active_arr[idx])
                         if not include_inactive and not is_active:
