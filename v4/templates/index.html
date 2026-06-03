@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>로컬 리걸 RAG - 전문 법률 AI 비서</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --chat-bg: #1e293b;
+            --text-color: #f1f5f9;
+            --text-muted: #94a3b8;
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --user-msg: #3b82f6;
+            --assistant-msg: #334155;
+            --danger: #ef4444;
+            --border-color: #475569;
+            --card-bg: #1e293b;
+            --font-stack: 'Inter', 'Noto Sans KR', sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-stack);
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        header {
+            background-color: var(--chat-bg);
+            padding: 1.2rem 2rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        header h1 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #38bdf8;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        header h1::before {
+            content: "⚖️";
+        }
+
+        .header-subtitle {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            background: #0f172a;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            border: 1px solid var(--border-color);
+        }
+
+        .main-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            max-width: 1000px;
+            width: 100%;
+            margin: 0 auto;
+            position: relative;
+            height: calc(100vh - 70px);
+        }
+
+        .chat-area {
+            flex: 1;
+            padding: 2rem;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            scroll-behavior: smooth;
+        }
+
+        /* Scrollbar styles */
+        .chat-area::-webkit-scrollbar {
+            width: 8px;
+        }
+        .chat-area::-webkit-scrollbar-track {
+            background: var(--bg-color);
+        }
+        .chat-area::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+
+        .message-row {
+            display: flex;
+            width: 100%;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .message-row.user {
+            justify-content: flex-end;
+        }
+
+        .message-row.assistant {
+            justify-content: flex-start;
+        }
+
+        .message-bubble {
+            max-width: 80%;
+            padding: 1rem 1.25rem;
+            border-radius: 1rem;
+            line-height: 1.6;
+            font-size: 0.95rem;
+            position: relative;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        }
+
+        .message-row.user .message-bubble {
+            background-color: var(--primary);
+            color: #ffffff;
+            border-bottom-right-radius: 0.25rem;
+        }
+
+        .message-row.assistant .message-bubble {
+            background-color: var(--assistant-msg);
+            color: var(--text-color);
+            border-bottom-left-radius: 0.25rem;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        /* 마크다운 가독성 스타일링 */
+        .message-bubble p {
+            margin-bottom: 0.75rem;
+        }
+        .message-bubble p:last-child {
+            margin-bottom: 0;
+        }
+        .message-bubble ul, .message-bubble ol {
+            margin-bottom: 0.75rem;
+            padding-left: 1.25rem;
+        }
+        .message-bubble li {
+            margin-bottom: 0.35rem;
+            line-height: 1.5;
+        }
+        .message-bubble strong {
+            color: #38bdf8;
+            font-weight: 600;
+        }
+
+        .system-blocked {
+            border: 1px solid var(--danger) !important;
+            background-color: rgba(239, 68, 68, 0.1) !important;
+            color: #fca5a5 !important;
+        }
+
+        .sources-details {
+            margin-top: 0.75rem;
+            border-top: 1px solid var(--border-color);
+            padding-top: 0.75rem;
+        }
+
+        .sources-details summary {
+            font-size: 0.82rem;
+            font-weight: 500;
+            color: #38bdf8;
+            cursor: pointer;
+            outline: none;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            width: fit-content;
+        }
+
+        .sources-details[open] summary {
+            margin-bottom: 0.5rem;
+        }
+
+        .sources-container {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            margin-top: 0.25rem;
+        }
+
+        .source-card {
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid var(--border-color);
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.5rem;
+            font-size: 0.82rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .source-card:hover {
+            border-color: #38bdf8;
+            background: rgba(15, 23, 42, 0.8);
+        }
+
+        .source-header {
+            font-weight: 500;
+            display: flex;
+            justify-content: space-between;
+            color: #e2e8f0;
+        }
+
+        .source-body {
+            display: none;
+            margin-top: 0.4rem;
+            color: var(--text-muted);
+            font-size: 0.78rem;
+            line-height: 1.4;
+            border-top: 1px dashed var(--border-color);
+            padding-top: 0.4rem;
+        }
+
+        .source-card.active .source-body {
+            display: block;
+        }
+
+        .input-area {
+            padding: 1.5rem;
+            background-color: var(--bg-color);
+            border-top: 1px solid var(--border-color);
+        }
+
+        .input-form {
+            display: flex;
+            gap: 0.75rem;
+            background-color: var(--chat-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 0.75rem;
+            padding: 0.5rem 0.75rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .input-form:focus-within {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+        }
+
+        .input-form textarea {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--text-color);
+            resize: none;
+            height: 40px;
+            max-height: 230px; /* 최대 10줄 수준 높이 */
+            overflow-y: auto; /* 초과 시 스크롤 제공 */
+            font-family: var(--font-stack);
+            font-size: 0.95rem;
+            outline: none;
+            padding: 0.5rem 0;
+            line-height: 1.4;
+        }
+
+        /* 입력창 스크롤바 스타일 */
+        .input-form textarea::-webkit-scrollbar {
+            width: 6px;
+        }
+        .input-form textarea::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .input-form textarea::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 3px;
+        }
+
+        .input-form button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.5rem 1.2rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            font-weight: 500;
+            font-family: var(--font-stack);
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            align-self: flex-end;
+        }
+
+        .input-form button:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .input-form button:disabled {
+            background-color: var(--border-color);
+            color: var(--text-muted);
+            cursor: not-allowed;
+        }
+
+        .loading-dots {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+            height: 24px;
+        }
+
+        .loading-dots span {
+            width: 8px;
+            height: 8px;
+            background-color: var(--text-muted);
+            border-radius: 50%;
+            display: inline-block;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+
+        .loading-dots span:nth-child(1) { animation-delay: -0.32s; }
+        .loading-dots span:nth-child(2) { animation-delay: -0.16s; }
+
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1.0); }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .intro-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            height: 100%;
+            color: var(--text-muted);
+            gap: 1rem;
+            padding: 2rem;
+        }
+
+        .intro-logo {
+            font-size: 3rem;
+        }
+
+        .intro-title {
+            color: var(--text-color);
+            font-weight: 600;
+            font-size: 1.5rem;
+        }
+
+        .intro-desc {
+            max-width: 450px;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .guardrail-tag {
+            display: inline-block;
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 0.1rem 0.4rem;
+            border-radius: 4px;
+            margin-right: 0.5rem;
+            vertical-align: middle;
+        }
+        .guardrail-tag.pass {
+            background-color: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+        }
+        .guardrail-tag.block {
+            background-color: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+
+        /* AI Thinking Process UI */
+        .thinking-container {
+            background-color: rgba(30, 41, 59, 0.4);
+            border: 1px solid rgba(148, 163, 184, 0.15);
+            border-radius: 0.75rem;
+            padding: 0.75rem 1rem;
+            margin-bottom: 0.75rem;
+            font-size: 0.85rem;
+            width: 100%;
+        }
+
+        .thinking-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-weight: 500;
+            color: #38bdf8;
+            margin-bottom: 0.5rem;
+        }
+
+        .thinking-spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid #38bdf8;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }
+
+        .thinking-logs {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+            padding-left: 1.25rem;
+            border-left: 1px solid var(--border-color);
+            margin-left: 6px;
+        }
+
+        .thinking-log-item {
+            color: var(--text-muted);
+            animation: fadeIn 0.2s ease;
+            position: relative;
+        }
+        
+        .thinking-log-item::before {
+            content: "•";
+            position: absolute;
+            left: -10px;
+            color: #38bdf8;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Collapsible details for finished thoughts */
+        .thinking-details {
+            margin-bottom: 0.75rem;
+            width: 100%;
+        }
+
+        .thinking-details summary {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 0.35rem 0.5rem;
+            background: rgba(30, 41, 59, 0.3);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            border-radius: 0.5rem;
+            outline: none;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            width: fit-content;
+            transition: all 0.2s;
+        }
+
+        .thinking-details summary:hover {
+            color: var(--text-color);
+            background: rgba(30, 41, 59, 0.6);
+            border-color: rgba(148, 163, 184, 0.2);
+        }
+
+        .thinking-details[open] summary {
+            margin-bottom: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>로컬 리걸 RAG 시스템</h1>
+        <div class="header-subtitle">완전 오프라인 보안 모드</div>
+    </header>
+
+    <div class="main-container">
+        <div class="chat-area" id="chatArea">
+            <div class="intro-container" id="introContainer">
+                <div class="intro-logo">⚖️</div>
+                <div class="intro-title">대한민국 법률 AI 비서</div>
+                <div class="intro-desc">
+                    본 시스템은 완전 로컬 인프라에서 작동하며 유저의 질문 정보가 외부로 유출되지 않습니다.<br>
+                    민사/형사/행정/지식재산법, 계약서 서식 및 금융 기계독해 코퍼스 등 다분야 법률 데이터베이스와 의도 라우팅 가드레일이 탑재되어 정확한 출처 기반 답변을 지원합니다.
+                </div>
+            </div>
+        </div>
+
+        <div class="input-area">
+            <form class="input-form" id="inputForm">
+                <textarea id="userInput" placeholder="사건번호나 법률적 쟁점을 질문해보세요... (예: 기소유예처분 취소 청구 조건)"></textarea>
+                <button type="submit" id="sendBtn">전송</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const chatArea = document.getElementById('chatArea');
+        const introContainer = document.getElementById('introContainer');
+        const userInput = document.getElementById('userInput');
+        const inputForm = document.getElementById('inputForm');
+        const sendBtn = document.getElementById('sendBtn');
+
+        // Handle auto resize textarea
+        userInput.addEventListener('input', function() {
+            this.style.height = '40px';
+            this.style.height = (this.scrollHeight - 10) + 'px';
+        });
+
+        // Maintain conversation history
+        let chatHistory = [];
+
+        // Submit form
+        inputForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const text = userInput.value.trim();
+            if (!text) return;
+
+            // Hide intro on first message
+            if (introContainer) {
+                introContainer.remove();
+            }
+
+            // Append user message
+            appendMessage('user', text);
+            userInput.value = '';
+            userInput.style.height = '40px';
+            
+            // Disable input and send button during processing
+            sendBtn.disabled = true;
+            sendBtn.innerText = '생각 중...';
+            userInput.disabled = true;
+
+            // Append assistant loading/thinking bubble
+            const messageObj = appendStreamingAssistantBubble();
+            const thinkingBox = messageObj.thinkingBox;
+            const thinkingLogs = messageObj.thinkingLogs;
+            const contentDiv = messageObj.contentDiv;
+            const tagsDiv = messageObj.tagsDiv;
+
+            // Start real-time ticking timer for overall progress
+            const startTime = Date.now();
+            const timerInterval = setInterval(() => {
+                const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+                const timerSpan = thinkingBox.querySelector('.thinking-timer');
+                if (timerSpan) {
+                    timerSpan.innerText = `${elapsed}s`;
+                }
+            }, 100);
+
+            // Variables for step-by-step timer
+            let currentStepTimer = null;
+            let currentStepStartTime = null;
+            let currentStepTimerSpan = null;
+
+            const stopCurrentStepTimer = () => {
+                if (currentStepTimer) {
+                    clearInterval(currentStepTimer);
+                    currentStepTimer = null;
+                }
+                if (currentStepTimerSpan && currentStepStartTime) {
+                    const elapsed = ((Date.now() - currentStepStartTime) / 1000).toFixed(1);
+                    currentStepTimerSpan.innerText = ` (${elapsed}s)`;
+                }
+            };
+
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: text, history: chatHistory })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Server error');
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop(); // keep last incomplete line
+
+                    for (const line of lines) {
+                        const trimmed = line.trim();
+                        if (!trimmed) continue;
+
+                        try {
+                            const event = JSON.parse(trimmed);
+                            if (event.type === 'log') {
+                                // Stop previous step timer before starting a new one
+                                stopCurrentStepTimer();
+
+                                // Append log item in real-time with step-by-step timer span
+                                const logItem = document.createElement('li');
+                                logItem.classList.add('thinking-log-item');
+                                
+                                const msgSpan = document.createElement('span');
+                                msgSpan.innerText = event.message;
+                                
+                                const timerSpan = document.createElement('span');
+                                timerSpan.classList.add('step-timer');
+                                timerSpan.style.color = 'var(--text-muted)';
+                                timerSpan.style.fontSize = '0.78rem';
+                                timerSpan.style.marginLeft = '0.4rem';
+                                timerSpan.innerText = ' (0.0s)';
+                                
+                                logItem.appendChild(msgSpan);
+                                logItem.appendChild(timerSpan);
+                                thinkingLogs.appendChild(logItem);
+                                chatArea.scrollTop = chatArea.scrollHeight;
+
+                                // Initialize and start step timer
+                                currentStepTimerSpan = timerSpan;
+                                currentStepStartTime = Date.now();
+                                currentStepTimer = setInterval(() => {
+                                    const elapsed = ((Date.now() - currentStepStartTime) / 1000).toFixed(1);
+                                    currentStepTimerSpan.innerText = ` (${elapsed}s)`;
+                                }, 100);
+                            } else if (event.type === 'final') {
+                                // Stop the final step timer and overall timer
+                                stopCurrentStepTimer();
+                                clearInterval(timerInterval);
+                                const totalElapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+
+                                // Collapse thinking log and replace with <details> block
+                                collapseThinkingBox(thinkingBox, thinkingLogs.innerHTML, totalElapsed);
+
+                                // Update tags
+                                const intentTag = event.is_legal_intent 
+                                    ? '<span class="guardrail-tag pass">법률질문 판정</span>'
+                                    : '<span class="guardrail-tag block">일반질문 차단</span>';
+                                const statusTag = event.blocked_by_guardrail 
+                                    ? '<span class="guardrail-tag block">가드레일 차단</span>'
+                                    : '<span class="guardrail-tag pass">가드레일 통과</span>';
+                                tagsDiv.innerHTML = `${intentTag} ${statusTag}`;
+
+                                // Show final answer
+                                contentDiv.style.whiteSpace = 'normal';
+                                contentDiv.innerHTML = marked.parse(event.answer);
+                                if (event.blocked_by_guardrail) {
+                                    messageObj.bubble.classList.add('system-blocked');
+                                }
+
+                                // Show citations
+                                if (event.sources && event.sources.length > 0) {
+                                    appendCitations(messageObj.bubble, event.sources);
+                                }
+
+                                // Save history
+                                if (!event.blocked_by_guardrail && event.is_legal_intent) {
+                                    chatHistory.push({ role: 'user', content: text });
+                                    chatHistory.push({ 
+                                        role: 'assistant', 
+                                        content: event.answer,
+                                        sources: event.sources || [] 
+                                    });
+                                }
+                                chatArea.scrollTop = chatArea.scrollHeight;
+                            }
+                        } catch (e) {
+                            console.warn("JSON parse error:", trimmed, e);
+                        }
+                    }
+                }
+
+            } catch (error) {
+                stopCurrentStepTimer();
+                clearInterval(timerInterval);
+                console.error(error);
+                if (thinkingBox) thinkingBox.remove();
+                contentDiv.innerText = '서버 통신 오류가 발생했습니다. 로컬 Ollama와 백엔드 서버 상태를 확인해주세요.';
+                messageObj.bubble.classList.add('system-blocked');
+            } finally {
+                stopCurrentStepTimer();
+                clearInterval(timerInterval);
+                // Re-enable input and button
+                sendBtn.disabled = false;
+                sendBtn.innerText = '전송';
+                userInput.disabled = false;
+                userInput.focus();
+            }
+        });
+
+        function appendMessage(sender, text, sources = [], isLegal = true, wasBlocked = false) {
+            const row = document.createElement('div');
+            row.classList.add('message-row', sender);
+
+            const bubble = document.createElement('div');
+            bubble.classList.add('message-bubble');
+
+            if (wasBlocked) {
+                bubble.classList.add('system-blocked');
+            }
+
+            let headerHTML = '';
+            if (sender === 'assistant') {
+                const intentTag = isLegal 
+                    ? '<span class="guardrail-tag pass">법률질문 판정</span>'
+                    : '<span class="guardrail-tag block">일반질문 차단</span>';
+                const statusTag = wasBlocked 
+                    ? '<span class="guardrail-tag block">가드레일 차단</span>'
+                    : '<span class="guardrail-tag pass">가드레일 통과</span>';
+                headerHTML = `<div style="margin-bottom: 0.5rem; display: flex; gap: 0.25rem;">${intentTag} ${statusTag}</div>`;
+            }
+
+            let bodyHTML = '';
+            if (sender === 'assistant') {
+                bodyHTML = `<div>${marked.parse(text)}</div>`;
+            } else {
+                bodyHTML = `<div style="white-space: pre-wrap;">${text}</div>`;
+            }
+            bubble.innerHTML = `${headerHTML}${bodyHTML}`;
+
+            if (sources && sources.length > 0) {
+                appendCitations(bubble, sources);
+            }
+
+            row.appendChild(bubble);
+            chatArea.appendChild(row);
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        function appendStreamingAssistantBubble() {
+            const row = document.createElement('div');
+            row.classList.add('message-row', 'assistant');
+
+            const bubble = document.createElement('div');
+            bubble.classList.add('message-bubble');
+
+            const tagsDiv = document.createElement('div');
+            tagsDiv.style.marginBottom = '0.5rem';
+            tagsDiv.style.display = 'flex';
+            tagsDiv.style.gap = '0.25rem';
+            bubble.appendChild(tagsDiv);
+
+            // Thinking Box
+            const thinkingBox = document.createElement('div');
+            thinkingBox.classList.add('thinking-container');
+            thinkingBox.innerHTML = `
+                <div class="thinking-header">
+                    <span class="thinking-spinner"></span>
+                    <span class="thinking-status">AI 법률 비서가 생각 중입니다... (<span class="thinking-timer">0.0s</span>)</span>
+                </div>
+                <ul class="thinking-logs"></ul>
+            `;
+            bubble.appendChild(thinkingBox);
+
+            const contentDiv = document.createElement('div');
+            contentDiv.style.whiteSpace = 'pre-wrap';
+            bubble.appendChild(contentDiv);
+
+            row.appendChild(bubble);
+            chatArea.appendChild(row);
+            chatArea.scrollTop = chatArea.scrollHeight;
+
+            return {
+                bubble: bubble,
+                tagsDiv: tagsDiv,
+                thinkingBox: thinkingBox,
+                thinkingLogs: thinkingBox.querySelector('.thinking-logs'),
+                contentDiv: contentDiv
+            };
+        }
+
+        function collapseThinkingBox(thinkingBox, logsHTML, elapsedTime) {
+            const details = document.createElement('details');
+            details.classList.add('thinking-details');
+            details.innerHTML = `
+                <summary>🔍 AI 법률 사고 과정 보기 (총 ${elapsedTime}초 소요)</summary>
+                <div class="thinking-container" style="margin-top: 0.5rem; margin-bottom: 0;">
+                    <div class="thinking-header" style="color: var(--text-muted);">
+                        <span>⚖️ 사고 로깅 완료</span>
+                    </div>
+                    <ul class="thinking-logs">${logsHTML}</ul>
+                </div>
+            `;
+            thinkingBox.parentNode.replaceChild(details, thinkingBox);
+        }
+
+        function appendCitations(bubble, sources) {
+            const details = document.createElement('details');
+            details.classList.add('sources-details');
+            details.innerHTML = `<summary>📄 법률 참조 근거 출처 보기 (총 ${sources.length}개)</summary>`;
+
+            const sourcesContainer = document.createElement('div');
+            sourcesContainer.classList.add('sources-container');
+
+            sources.forEach(src => {
+                const card = document.createElement('div');
+                card.classList.add('source-card');
+                card.innerHTML = `
+                    <div class="source-header">
+                        <span>[출처 ${src.index}] ${src.title}</span>
+                        <span>자세히 보기</span>
+                    </div>
+                    <div class="source-body">${src.snippet}</div>
+                `;
+                card.addEventListener('click', () => {
+                    card.classList.toggle('active');
+                    const arrow = card.querySelector('.source-header span:last-child');
+                    arrow.innerText = card.classList.contains('active') ? '접기' : '자세히 보기';
+                });
+                sourcesContainer.appendChild(card);
+            });
+            
+            details.appendChild(sourcesContainer);
+            bubble.appendChild(details);
+        }
+
+        // Send with Enter key, new line with Shift+Enter
+        userInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendBtn.click();
+            }
+        });
+    </script>
+</body>
+</html>

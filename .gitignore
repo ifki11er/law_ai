@@ -1,0 +1,41 @@
+# Python virtual environments & caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.cache/
+.pytest_cache/
+
+# IDEs
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# RAG Data & Raw Datasets (CRITICAL - DO NOT PUSH BIG DATA)
+docs/학습데이터/
+docs/대기/
+**/data/
+*.pkl
+*.sqlite3
+*.db
+
+# Environment & Sensitive Keys
+.env
+.env.*
+
+# Temporary Debug/Inspect scripts
+v4/debug_q4.py
+scratch/
+<<<<<<< HEAD
+v4/data_backup/
+v4/config/settings.py
+=======
+>>>>>>> parent of ed0ea60 (민사법까지 학습 완료)

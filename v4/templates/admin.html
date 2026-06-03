@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>법률 RAG v4 - 데이터베이스 관리자</title>
+    <!-- Google Fonts: Outfit, Inter, Noto Sans KR -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+KR:wght@300;400;500;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --surface-color: rgba(20, 24, 38, 0.65);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --text-primary: #f3f4f6;
+            --text-secondary: #9ca3af;
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --accent: #a855f7;
+            --accent-glow: rgba(168, 85, 247, 0.15);
+            --font-main: 'Inter', 'Noto Sans KR', sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        body {
+            background: radial-gradient(circle at 50% 0%, #1c1936 0%, var(--bg-color) 70%);
+            color: var(--text-primary);
+            font-family: var(--font-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        header {
+            border-bottom: 1px solid var(--border-color);
+            background: rgba(11, 15, 25, 0.8);
+            backdrop-filter: blur(12px);
+            padding: 1rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #a855f7, #6366f1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+        }
+
+        .nav-btn {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 0.9rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .nav-btn:hover {
+            color: var(--text-primary);
+            border-color: var(--primary);
+            background: rgba(99, 102, 241, 0.1);
+        }
+
+        .nav-btn.primary-action {
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            border: none;
+            color: white;
+            font-weight: 600;
+        }
+
+        .nav-btn.primary-action:hover {
+            opacity: 0.9;
+            box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
+        }
+
+        main {
+            flex: 1;
+            max-width: 1200px;
+            width: 100%;
+            margin: 2rem auto;
+            padding: 0 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        .intro-card {
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 2rem;
+            backdrop-filter: blur(16px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .intro-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -20%;
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .intro-card h1 {
+            font-size: 1.8rem;
+            margin-bottom: 0.5rem;
+            font-family: 'Outfit', sans-serif;
+            background: linear-gradient(to right, #ffffff, #c084fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .intro-card p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+
+        /* Search Section */
+        .search-container {
+            display: flex;
+            gap: 1rem;
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1rem;
+            backdrop-filter: blur(12px);
+            align-items: center;
+        }
+
+        .search-input-wrapper {
+            position: relative;
+            flex: 1;
+        }
+
+        .search-input-wrapper i {
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-secondary);
+        }
+
+        .search-input {
+            width: 100%;
+            background: rgba(11, 15, 25, 0.6);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0.75rem 1rem 0.75rem 2.7rem;
+            color: var(--text-primary);
+            font-size: 1rem;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 10px rgba(99, 102, 241, 0.2);
+        }
+
+        .checkbox-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .checkbox-wrapper input {
+            cursor: pointer;
+            accent-color: var(--primary);
+            width: 16px;
+            height: 16px;
+        }
+
+        .btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn:hover {
+            background: var(--primary-hover);
+        }
+
+        /* Results List */
+        .results-container {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .result-card {
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 1.5rem;
+            backdrop-filter: blur(16px);
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            position: relative;
+        }
+
+        .result-card:hover {
+            border-color: rgba(99, 102, 241, 0.3);
+            box-shadow: 0 8px 24px rgba(99, 102, 241, 0.05);
+        }
+
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding-bottom: 0.75rem;
+        }
+
+        .result-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .result-title {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: #ffffff;
+        }
+
+        .result-pid {
+            font-family: monospace;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.05);
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            width: fit-content;
+        }
+
+        .badge {
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 0.25rem 0.6rem;
+            border-radius: 50px;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .badge.active {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--success);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .badge.inactive {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--danger);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .result-body {
+            color: #d1d5db;
+            font-size: 0.95rem;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 1rem;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            max-height: 250px;
+            overflow-y: auto;
+        }
+
+        .result-actions {
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+        }
+
+        .action-btn {
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid transparent;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .action-btn.amend {
+            background: rgba(99, 102, 241, 0.1);
+            color: #818cf8;
+            border-color: rgba(99, 102, 241, 0.3);
+        }
+
+        .action-btn.amend:hover {
+            background: var(--primary);
+            color: white;
+        }
+
+        .action-btn.repeal {
+            background: rgba(239, 68, 68, 0.1);
+            color: #f87171;
+            border-color: rgba(239, 68, 68, 0.3);
+        }
+
+        .action-btn.repeal:hover {
+            background: var(--danger);
+            color: white;
+        }
+
+        /* Modal styling */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(8px);
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal {
+            background: #111422;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            width: 90%;
+            max-width: 700px;
+            border-radius: 16px;
+            padding: 2rem;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            animation: slideDown 0.3s ease-out;
+        }
+
+        @keyframes slideDown {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding-bottom: 0.75rem;
+        }
+
+        .modal-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.4rem;
+            font-weight: 700;
+        }
+
+        .close-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+
+        .close-btn:hover {
+            color: var(--text-primary);
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .form-group.full-width {
+            grid-column: span 2;
+        }
+
+        .form-group label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .form-input, .form-textarea {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0.6rem 0.8rem;
+            color: var(--text-primary);
+            font-family: var(--font-main);
+        }
+
+        .form-input:focus, .form-textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .form-textarea {
+            min-height: 180px;
+            resize: vertical;
+            line-height: 1.6;
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            padding-top: 1rem;
+        }
+
+        /* Status Toast */
+        .toast {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            background: #1e293b;
+            border: 1px solid var(--border-color);
+            padding: 1rem 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            display: none;
+            align-items: center;
+            gap: 0.75rem;
+            z-index: 2000;
+            animation: slideUp 0.3s ease-out;
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 4rem;
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+            border: 2px dashed rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="header-logo">
+            <i data-lucide="shield-check"></i> Antigravity Admin
+        </div>
+        <div class="nav-links">
+            <a href="/" class="nav-btn"><i data-lucide="message-square"></i> RAG 채팅 바로가기</a>
+            <button onclick="openModal('insert')" class="nav-btn primary-action"><i data-lucide="plus-circle"></i> 신규 조문 등록</button>
+        </div>
+    </header>
+
+    <main>
+        <div class="intro-card">
+            <h1>데이터베이스 유지보수 패널 (v4)</h1>
+            <p>법률 RAG 시스템 데이터베이스의 조문들을 조회, 폐지, 개정하는 공간입니다. 구버전 법률 조항은 Soft Delete 처리되어 데이터베이스 내 보존되며, 검색 대상에서 제외되도록 마킹됩니다.</p>
+        </div>
+
+        <div class="search-container">
+            <div class="search-input-wrapper">
+                <i data-lucide="search"></i>
+                <input type="text" id="queryInput" class="search-input" placeholder="수정/폐지 대상 법령명 또는 조항을 검색하세요 (예: 민법 제3조, 상법...)" onkeydown="if(event.key==='Enter') searchAdmin()">
+            </div>
+            <label class="checkbox-wrapper">
+                <input type="checkbox" id="includeInactive" checked>
+                <span>비활성화(폐지) 항목 포함</span>
+            </label>
+            <button onclick="searchAdmin()" class="btn"><i data-lucide="arrow-right"></i> 검색</button>
+        </div>
+
+        <div class="results-container" id="resultsContainer">
+            <div class="no-results">
+                <i data-lucide="search" style="width: 48px; height: 48px; opacity: 0.5;"></i>
+                검색어를 입력하고 검색 버튼을 눌러 조문을 조회하세요.
+            </div>
+        </div>
+    </main>
+
+    <!-- Insert / Amend Modal -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title" id="modalTitle">신규 조문 등록</div>
+                <button class="close-btn" onclick="closeModal()"><i data-lucide="x"></i></button>
+            </div>
+            <div class="modal-body">
+                <form id="articleForm" onsubmit="submitForm(event)" class="form-grid">
+                    <input type="hidden" id="formMode">
+                    <input type="hidden" id="formOldParentId">
+                    
+                    <div class="form-group">
+                        <label for="formDocId">문서 고유 ID</label>
+                        <input type="text" id="formDocId" class="form-input" placeholder="예: 10010" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="formFilePrefix">파일 접두사 (file_prefix)</label>
+                        <input type="text" id="formFilePrefix" class="form-input" placeholder="예: TS_법령_민법" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="formDocType">문서 분류 (doc_type)</label>
+                        <input type="text" id="formDocType" class="form-input" placeholder="예: 대한민국 법령" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="formCaseNum">법령 공포 번호 (caseNum)</label>
+                        <input type="text" id="formCaseNum" class="form-input" placeholder="예: 법률 제18429호" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="formCaseName">법령명 (caseName)</label>
+                        <input type="text" id="formCaseName" class="form-input" placeholder="예: 민법" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="formSectionName">조항명 (section_name)</label>
+                        <input type="text" id="formSectionName" class="form-input" placeholder="예: 제3조" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="formVersion">버전 (version)</label>
+                        <input type="text" id="formVersion" class="form-input" placeholder="예: v1, v2" value="v1" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="formSourceFile">출처 파일명</label>
+                        <input type="text" id="formSourceFile" class="form-input" placeholder="예: TS_법령_민법.csv" required>
+                    </div>
+                    <div class="form-group full-width">
+                        <label for="formText">조문 본문</label>
+                        <textarea id="formText" class="form-textarea" placeholder="조문 전체 내용을 입력해 주세요." required></textarea>
+                    </div>
+                    
+                    <div class="modal-footer full-width">
+                        <button type="button" class="nav-btn" onclick="closeModal()">취소</button>
+                        <button type="submit" class="btn"><i data-lucide="check"></i> 저장하기</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast">
+        <i data-lucide="info" id="toastIcon" style="color: var(--primary);"></i>
+        <span id="toastMsg">알림 메시지</span>
+    </div>
+
+    <script>
+        // Init Lucide Icons
+        lucide.createIcons();
+
+        // Show Toast Function
+        function showToast(msg, type = "success") {
+            const toast = document.getElementById("toast");
+            const toastMsg = document.getElementById("toastMsg");
+            const toastIcon = document.getElementById("toastIcon");
+
+            toastMsg.innerText = msg;
+            if (type === "success") {
+                toastIcon.style.color = "var(--success)";
+                toastIcon.setAttribute("data-lucide", "check-circle");
+            } else {
+                toastIcon.style.color = "var(--danger)";
+                toastIcon.setAttribute("data-lucide", "alert-circle");
+            }
+            lucide.createIcons();
+            
+            toast.style.display = "flex";
+            setTimeout(() => {
+                toast.style.display = "none";
+            }, 3000);
+        }
+
+        // Search Admin endpoint
+        async function searchAdmin() {
+            const query = document.getElementById("queryInput").value.trim();
+            const includeInactive = document.getElementById("includeInactive").checked;
+            const container = document.getElementById("resultsContainer");
+
+            if (!query) {
+                showToast("검색어를 입력해 주세요.", "error");
+                return;
+            }
+
+            container.innerHTML = `
+                <div class="no-results">
+                    <i data-lucide="loader" class="spin" style="width: 48px; height: 48px; color: var(--primary);"></i>
+                    데이터베이스 검색 중...
+                </div>
+            `;
+            lucide.createIcons();
+
+            try {
+                const response = await fetch("/api/admin/search", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ query, include_inactive: includeInactive })
+                });
+
+                const data = await response.json();
+                if (data.success && data.results.length > 0) {
+                    container.innerHTML = "";
+                    data.results.forEach(item => {
+                        const card = document.createElement("div");
+                        card.className = "result-card";
+                        
+                        const badgeClass = item.is_active ? "active" : "inactive";
+                        const badgeText = item.is_active ? "활성 상태" : "폐지됨(비활성)";
+                        
+                        card.innerHTML = `
+                            <div class="result-header">
+                                <div class="result-meta">
+                                    <div class="result-title">${item.title}</div>
+                                    <div class="result-pid">parent_id: ${item.parent_id}</div>
+                                </div>
+                                <span class="badge ${badgeClass}">${badgeText}</span>
+                            </div>
+                            <div class="result-body">${item.text}</div>
+                            <div class="result-actions">
+                                <button onclick="amendAction('${item.parent_id}', ${escapeHtml(JSON.stringify(item))})" class="action-btn amend"><i data-lucide="edit-3"></i> 이 조문 개정 (Amend)</button>
+                                ${item.is_active ? `<button onclick="repealAction('${item.parent_id}')" class="action-btn repeal"><i data-lucide="trash-2"></i> 이 조문 폐지 (Repeal)</button>` : ''}
+                            </div>
+                        `;
+                        container.appendChild(card);
+                    });
+                    lucide.createIcons();
+                } else {
+                    container.innerHTML = `
+                        <div class="no-results">
+                            <i data-lucide="alert-circle" style="width: 48px; height: 48px; opacity: 0.5;"></i>
+                            일치하는 조문이 존재하지 않습니다.
+                        </div>
+                    `;
+                    lucide.createIcons();
+                }
+            } catch (err) {
+                console.error(err);
+                showToast("검색을 수행하는 도중 오류가 발생했습니다.", "error");
+            }
+        }
+
+        function escapeHtml(string) {
+            return String(string).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+        }
+
+        // Action: Repeal
+        async function repealAction(parentId) {
+            if (!confirm(`조문 '${parentId}'을 정말로 폐지 처리(비활성화) 하시겠습니까?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch("/api/admin/repeal", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ parent_id: parentId })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    showToast("성공적으로 폐지(비활성화)되었습니다.");
+                    searchAdmin();
+                } else {
+                    showToast("폐지 처리에 실패하였습니다.", "error");
+                }
+            } catch (err) {
+                showToast("API 요청 중 오류가 발생했습니다.", "error");
+            }
+        }
+
+        // Open Amend Form
+        function amendAction(parentId, item) {
+            const meta = item.metadata || {};
+            
+            document.getElementById("modalTitle").innerText = `조문 개정 (Amend)`;
+            document.getElementById("formMode").value = "amend";
+            document.getElementById("formOldParentId").value = parentId;
+
+            document.getElementById("formDocId").value = meta.doc_id || "";
+            document.getElementById("formFilePrefix").value = meta.file_prefix || "";
+            document.getElementById("formDocType").value = meta.doc_type || "대한민국 법령";
+            document.getElementById("formCaseNum").value = meta.caseNum || "";
+            document.getElementById("formCaseName").value = meta.caseName || "";
+            document.getElementById("formSectionName").value = meta.section_name || "";
+            
+            // Auto increment version suffix
+            let version = meta.parent_id ? meta.parent_id.split('_').pop() : 'v1';
+            if (version.startsWith('v')) {
+                const num = parseInt(version.replace('v', '')) || 1;
+                document.getElementById("formVersion").value = `v${num + 1}`;
+            } else {
+                document.getElementById("formVersion").value = "v2";
+            }
+            
+            document.getElementById("formSourceFile").value = meta.source_file || "";
+            document.getElementById("formText").value = item.text || "";
+
+            document.getElementById("modalOverlay").style.display = "flex";
+        }
+
+        // Open Modal: New Insert or Amend
+        function openModal(mode) {
+            if (mode === "insert") {
+                document.getElementById("modalTitle").innerText = "신규 조문 등록";
+                document.getElementById("formMode").value = "insert";
+                document.getElementById("formOldParentId").value = "";
+                document.getElementById("articleForm").reset();
+                document.getElementById("formVersion").value = "v1";
+                document.getElementById("formDocType").value = "대한민국 법령";
+            }
+            document.getElementById("modalOverlay").style.display = "flex";
+        }
+
+        function closeModal() {
+            document.getElementById("modalOverlay").style.display = "none";
+        }
+
+        // Submit form (Insert or Amend)
+        async function submitForm(e) {
+            e.preventDefault();
+
+            const mode = document.getElementById("formMode").value;
+            const doc_metadata = {
+                doc_id: document.getElementById("formDocId").value.trim(),
+                file_prefix: document.getElementById("formFilePrefix").value.trim(),
+                doc_type: document.getElementById("formDocType").value.trim(),
+                caseNum: document.getElementById("formCaseNum").value.trim(),
+                caseName: document.getElementById("formCaseName").value.trim(),
+                source_file: document.getElementById("formSourceFile").value.trim(),
+            };
+
+            const section_name = document.getElementById("formSectionName").value.trim();
+            const text = document.getElementById("formText").value.trim();
+            const version = document.getElementById("formVersion").value.trim();
+
+            try {
+                let response, data;
+                if (mode === "insert") {
+                    response = await fetch("/api/admin/insert", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ doc_metadata, section_name, text, version })
+                    });
+                } else {
+                    const old_parent_id = document.getElementById("formOldParentId").value;
+                    response = await fetch("/api/admin/amend", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            old_parent_id,
+                            doc_metadata,
+                            section_name,
+                            new_text: text,
+                            new_version: version
+                        })
+                    });
+                }
+
+                data = await response.json();
+                if (data.success) {
+                    showToast(mode === "insert" ? "성공적으로 신설 등록되었습니다." : "성공적으로 개정 반영되었습니다.");
+                    closeModal();
+                    // Refetch if there is query inside search
+                    if (document.getElementById("queryInput").value) {
+                        searchAdmin();
+                    }
+                } else {
+                    showToast("오류가 발생하여 데이터 반영에 실패했습니다.", "error");
+                }
+            } catch (err) {
+                showToast("네트워크 오류 발생", "error");
+            }
+        }
+    </script>
+</body>
+</html>
