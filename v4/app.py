@@ -138,25 +138,11 @@ async def chat_endpoint(payload: ChatRequest):
     print("="*50)
     
     async def event_generator():
-        # 1. 1차 통합 질문 분석 (의도 판단 + 카테고리 분류 + 쿼리 확장) 기동
+        # 1. 1차 통합 질문 분석 (의도 분류 및 검색어 확장) 기동
         yield json.dumps({"type": "log", "message": "🛡️ [1단계] 통합 질문 분석 가동: 의도 분류 및 검색어 확장 분석 중..."}) + "\n"
         await asyncio.sleep(0.05)
         
         analysis = guardrail_agent.analyze_query(query, history)
-        is_legal_intent = analysis.get("is_legal", True)
-        
-        if not is_legal_intent:
-            blocked_msg = "본 서비스는 제공된 법전 및 판례 데이터에 기반한 법률 질의응답 서비스입니다. 입력하신 질문은 법률과 무관하여 답변이 불가능합니다."
-            yield json.dumps({"type": "log", "message": "❌ [1단계 결과] 일반 질문으로 판정되어 즉시 차단되었습니다."}) + "\n"
-            yield json.dumps({
-                "type": "final",
-                "answer": blocked_msg,
-                "is_legal_intent": False,
-                "blocked_by_guardrail": True,
-                "sources": []
-            }) + "\n"
-            return
-            
         category = analysis.get("category", "law_ruling")
         expanded_query = analysis.get("expanded_query", query)
         

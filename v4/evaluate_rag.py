@@ -249,14 +249,10 @@ def run_evaluation():
         if sc['case_name'] and sc['case_name'] != "알 수 없음":
             search_query = f"[{sc['case_name']}] {sc['question']}"
             
-        # 1차 통합 질문 분석 (의도 판단 + 카테고리 분류 + 쿼리 확장) 기동
+        # 1차 통합 질문 분석 (카테고리 분류 및 쿼리 확장) 기동
         print(f"[Q{q_num} - 1차 결과] 통합 질문 분석 기동 중...")
         analysis = guardrail_agent.analyze_query(search_query)
-        
-        if not analysis.get("is_legal", True):
-            print(f"[Q{q_num} - 1차 결과] ❌ 일반 질문으로 차단되어 평가 중단!")
-            continue
-        print(f"[Q{q_num} - 1차 결과] ✅ 법률 질문 판정 통과.")
+        print(f"[Q{q_num} - 1차 결과] 분석 완료.")
         
         category = analysis.get("category", "law_ruling")
         expanded_query = analysis.get("expanded_query", search_query)
