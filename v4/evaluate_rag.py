@@ -2,6 +2,7 @@ import os
 import glob
 import json
 import sys
+import unicodedata
 from langchain_core.messages import SystemMessage, HumanMessage
 from core.embedding import LegalEmbedding
 from core.vector_db import LegalVectorDB
@@ -9,6 +10,68 @@ from agents.guardrail_agent import GuardrailAgent
 from agents.llm_agent import LLMAgent
 from config.settings import AI_HUB_DATA_PATH, STANDARD_REFUSAL, CHROMA_DB_PATH, LLM_PROVIDER, OPENAI_LLM_MODEL, OLLAMA_LLM_MODEL
 from core.llm_factory import get_llm
+
+def get_display_width(s: str) -> int:
+    """
+    Calculates the display width of a string.
+    East Asian characters are counted as width 2, others as 1.
+    """
+    width = 0
+    for char in s:
+        status = unicodedata.east_asian_width(char)
+        if status in ('W', 'F', 'A'):
+            width += 2
+        else:
+            width += 1
+    return width
+
+def truncate_string(s: str, max_width: int) -> str:
+    """
+    Truncates a string to fit within max_width display width, appending '..' if truncated.
+    """
+    current_width = get_display_width(s)
+    if current_width <= max_width:
+        return s
+    
+    res = ""
+    width = 0
+    limit = max_width - 2
+    for char in s:
+        char_width = 2 if unicodedata.east_asian_width(char) in ('W', 'F', 'A') else 1
+        if width + char_width > limit:
+            break
+        res += char
+        width += char_width
+    return res + ".."
+
+def pad_string(s: str, target_width: int, align: str = 'left') -> str:
+    """
+    Pads a string to the target display width, handling East Asian character widths.
+    """
+    current_width = get_display_width(s)
+    pad_len = target_width - current_width
+    if pad_len <= 0:
+        return s
+    
+    if align == 'right':
+        return ' ' * pad_len + s
+    elif align == 'center':
+        left_pad = pad_len // 2
+        right_pad = pad_len - left_pad
+        return ' ' * left_pad + s + ' ' * right_pad
+    else: # left
+        return s + ' ' * pad_len
+
+def format_row(cols, widths, alignments):
+    """
+    Formats a row of cells with specified widths and alignments.
+    """
+    formatted_cols = []
+    for col, width, align in zip(cols, widths, alignments):
+        truncated = truncate_string(col, width)
+        padded = pad_string(truncated, width, align)
+        formatted_cols.append(padded)
+    return "| " + " | ".join(formatted_cols) + " |"
 
 class LegalEvaluator:
     """
@@ -50,9 +113,12 @@ class LegalEvaluator:
             "당신은 엄격하고 객관적인 대한민국 법률 벤치마크 채점관입니다.\n"
             "아래 제공된 [사용자 질문], [전문가 모범 답안], 그리고 [RAG 시스템 답변]을 정밀 비교하여 RAG 답변의 채점 점수를 0점에서 100점 사이로 평가하고 그 사유를 작성하세요.\n\n"
             "채점 기준:\n"
-            "1. 결론의 일치성 (40점): 판결/법령의 최종 결론(예: 기본권 침해 여부, 위반 여부 등)이 모범 답안과 완벽히 일치하는가?\n"
-            "2. 논리의 타당성 (40점): 법원/기관이 결론을 내린 핵심 논리와 사유를 올바르게 제시했는가?\n"
-            "3. 답변의 정밀성 (20점): 허위 조항을 지어내거나 애매모호한 면책성 disclaimer(\"변호사와 상담하세요\")로 답변을 회피하지 않고 확정적으로 대답했는가?\n\n"
+            "1. 결론의 일치성 (40점 만점): 판결/법령의 최종 결론(예: 기본권 침해 여부, 위반 여부 등)이 모범 답안과 완벽히 일치하는가?\n"
+            "2. 논리의 타당성 (40점 만점): 법원/기관이 결론을 내린 핵심 논리와 사유를 올바르게 제시했는가?\n"
+            "3. 답변의 정밀성 (20점 만점): 허위 조항을 지어내거나 애매모호한 면책성 disclaimer(\"변호사와 상담하세요\")로 답변을 회피하지 않고 확정적으로 대답했는가?\n\n"
+            "💡 중요 채점 가이드라인:\n"
+            "- 10점, 20점 단위로 뭉뚱그려 채점하지 마시고, 부분적인 결함이나 문맥의 차이를 반영하여 1점 단위로 정밀하게 감점하여 평가해 주세요. (예: 87점, 93점, 76점 등)\n"
+            "- 결론이 일치하더라도 사유나 논리가 약간 미진하면 논리성에서 3~7점을 감점하는 등 상세하게 평가하십시오.\n\n"
             "반드시 아래 JSON 포맷으로만 응답해야 하며, 다른 부연 설명은 절대 하지 마십시오. JSON 문법을 완벽히 지키십시오:\n"
             '{"score": 점수(정수), "reason": "한 줄 채점평"}'
         )
@@ -97,8 +163,7 @@ def load_test_scenarios(labeled_path: str, ingested_prefixes: set = None) -> lis
     """
     라벨링 데이터 폴더를 재귀적으로 탐색하여 *_QA_*.json 파일들을 찾아 파싱합니다.
     디바이스 용량 절약 및 일관성을 위해, 데이터베이스에 실제 존재하는 파일만 평가합니다.
-    너무 많은 파일이 로드되어 평가가 오래 걸리는 것을 막기 위해, 
-    각 디렉토리(유형)별로 최대 2개씩만 샘플링합니다.
+    최대 100개의 문항을 로드하며, 다양한 카테고리가 고르게 섞이도록 디렉토리별 라운드로빈 방식으로 샘플링합니다.
     """
     scenarios = []
     
@@ -122,46 +187,55 @@ def load_test_scenarios(labeled_path: str, ingested_prefixes: set = None) -> lis
                         continue
                     qa_files_by_dir[root].append(os.path.join(root, file))
                     
-    for dir_path, files in qa_files_by_dir.items():
-        # Sample at most 2 files per QA directory to keep evaluations fast
-        for file_path in files[:2]:
-            try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    label = data.get("label", {})
-                    info = data.get("info", {})
+    # Collect all available QA files and round-robin sample to get a balanced representation
+    all_file_paths = []
+    if qa_files_by_dir:
+        max_files_in_dir = max(len(f_list) for f_list in qa_files_by_dir.values())
+        for idx in range(max_files_in_dir):
+            for dir_path, f_list in qa_files_by_dir.items():
+                if idx < len(f_list):
+                    all_file_paths.append((dir_path, f_list[idx]))
                     
-                    rel_path = os.path.relpath(dir_path, labeled_path)
-                    parts = rel_path.split(os.sep)
-                    category_display = parts[-1] if parts else "법률 질문"
+    for dir_path, file_path in all_file_paths:
+        if len(scenarios) >= 100:
+            break
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                label = data.get("label", {})
+                info = data.get("info", {})
+                
+                rel_path = os.path.relpath(dir_path, labeled_path)
+                parts = rel_path.split(os.sep)
+                category_display = parts[-1] if parts else "법률 질문"
+                
+                if "결정례" in category_display:
+                    category_display = "헌법재판소 결정례"
+                elif "법령" in category_display:
+                    category_display = "대한민국 법령"
+                elif "판결문" in category_display:
+                    category_display = "법원 판결문"
+                elif "해석례" in category_display:
+                    category_display = "법률 해석례"
                     
-                    if "결정례" in category_display:
-                        category_display = "헌법재판소 결정례"
-                    elif "법령" in category_display:
-                        category_display = "대한민국 법령"
-                    elif "판결문" in category_display:
-                        category_display = "법원 판결문"
-                    elif "해석례" in category_display:
-                        category_display = "법률 해석례"
-                        
-                    question = (label.get("input") or label.get("instruction") or label.get("question") or "").strip()
-                    expected_answer = (label.get("output") or label.get("answer") or "").strip()
+                question = (label.get("input") or label.get("instruction") or label.get("question") or "").strip()
+                expected_answer = (label.get("output") or label.get("answer") or "").strip()
+                
+                # If question is empty, print warning and some debug info about the JSON structure
+                if not question:
+                    print(f"⚠️ 경고: '{os.path.basename(file_path)}' 파일의 질문 내용이 비어 있습니다.")
+                    print(f"   [JSON 루트 Key]: {list(data.keys())}")
+                    if "label" in data:
+                        print(f"   [label 내부 Key]: {list(data['label'].keys()) if isinstance(data['label'], dict) else data['label']}")
                     
-                    # If question is empty, print warning and some debug info about the JSON structure
-                    if not question:
-                        print(f"⚠️ 경고: '{os.path.basename(file_path)}' 파일의 질문 내용이 비어 있습니다.")
-                        print(f"   [JSON 루트 Key]: {list(data.keys())}")
-                        if "label" in data:
-                            print(f"   [label 내부 Key]: {list(data['label'].keys()) if isinstance(data['label'], dict) else data['label']}")
-                        
-                    scenarios.append({
-                        "category": category_display,
-                        "case_name": info.get("caseName") or label.get("lawName") or info.get("lawName") or info.get("title") or "알 수 없음",
-                        "question": question,
-                        "expected_answer": expected_answer
-                    })
-            except Exception as e:
-                print(f"파일 파싱 중 에러 발생 ({file_path}): {e}")
+                scenarios.append({
+                    "category": category_display,
+                    "case_name": info.get("caseName") or label.get("lawName") or info.get("lawName") or info.get("title") or "알 수 없음",
+                    "question": question,
+                    "expected_answer": expected_answer
+                })
+        except Exception as e:
+            print(f"파일 파싱 중 에러 발생 ({file_path}): {e}")
                 
     return scenarios
 
@@ -236,6 +310,7 @@ def run_evaluation():
     sum_scores = 0
     sum_similarities = 0
     evaluated_count = 0
+    evaluation_results = []
     
     for idx, sc in enumerate(scenarios):
         q_num = idx + 1
@@ -286,6 +361,15 @@ def run_evaluation():
         sum_similarities += sim_score
         evaluated_count += 1
         
+        # Save result for the final summary table
+        evaluation_results.append({
+            "num": f"Q{q_num}",
+            "category": sc['category'],
+            "case_name": sc['case_name'],
+            "score": f"{score}점",
+            "similarity": f"{sim_score*100:.1f}%"
+        })
+        
         print("\n" + "-"*40)
         print(f"[Q{q_num} - 채점 및 대조 결과]")
         print("-"*40)
@@ -305,8 +389,39 @@ def run_evaluation():
         
     # 종합 성적표 산출
     if evaluated_count > 0:
+        print("\n" + "="*80)
+        print("📊 [ 문항별 상세 채점 결과 ]")
+        print("="*80)
+        
+        widths = [5, 16, 32, 10, 10]
+        headers = ["No", "유형", "사건명/법령명", "LLM 점수", "유사도"]
+        alignments = ["center", "left", "left", "center", "center"]
+        
+        sep = "+" + "+".join(["-" * (w + 2) for w in widths]) + "+"
+        print(sep)
+        print(format_row(headers, widths, alignments))
+        print(sep)
+        
+        for res in evaluation_results:
+            row_data = [
+                res["num"],
+                res["category"],
+                res["case_name"],
+                res["score"],
+                res["similarity"]
+            ]
+            print(format_row(row_data, widths, alignments))
+            
+        print(sep)
+
         avg_score = sum_scores / evaluated_count
         avg_sim = sum_similarities / evaluated_count
+
+        # Print average row at the bottom of the table
+        avg_row_data = ["평균", "-", "-", f"{avg_score:.1f}점", f"{avg_sim*100:.1f}%"]
+        print(format_row(avg_row_data, widths, alignments))
+        print(sep)
+
         print("\n" + "="*60)
         print("=== 🏆 [ RAG v4 시스템 종합 성적표 ] 🏆 ===")
         print("="*60)

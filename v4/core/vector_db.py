@@ -316,6 +316,7 @@ class LegalVectorDB:
         print(f"[VectorDB v3] Chroma DB 적재 시작: {total_docs}개 청크 (경로: {self.db_path})")
         
         # 1. Chroma DB Add
+        import time
         for i in range(0, total_docs, batch_size):
             batch = documents[i:i + batch_size]
             batch_ids = ids[i:i + batch_size]
@@ -323,6 +324,21 @@ class LegalVectorDB:
             total_batches = (total_docs + batch_size - 1) // batch_size
             print(f" -> [배치 {current_batch_num}/{total_batches}] {i}번부터 {min(i + batch_size, total_docs)}번 청크 적재 중...")
             self.db.add_documents(batch, ids=batch_ids)
+            
+            # 백그라운드 컴팩터 스레드가 파일 쓰기 병합을 완료할 수 있도록 배치 간 짧은 대기 시간 부여
+            time.sleep(0.5)
+            
+            # [v4+ 수정] 대용량 적재 시 HNSW 컴팩션 에러 방지를 위해 주기적으로 커넥션 리셋 및 메모리 플러시 실행 (4만 청크 단위)
+            if current_batch_num % 20 == 0:
+                print(f"  └─ [메모리 및 DB 플러시] Chroma DB 연결을 재설정하여 WAL 로그를 디스크에 강제 병합(Compaction)하고 락을 해제합니다...")
+                import gc
+                self.db = None
+                gc.collect()
+                time.sleep(3)  # Windows 파일 락 해제 대기
+                self.db = Chroma(
+                    persist_directory=self.db_path,
+                    embedding_function=self.embedding_function
+                )
             
         # 2. Build BM25 Index and Save as FastBM25
         print(f"[VectorDB v3] BM25 역색인(Lexical Index) 생성 중...")
