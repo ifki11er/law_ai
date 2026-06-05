@@ -234,8 +234,6 @@ def load_test_scenarios(labeled_path: str, ingested_prefixes: set = None) -> lis
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                label = data.get("label", {})
-                info = data.get("info", {})
                 
                 rel_path = os.path.relpath(dir_path, labeled_path)
                 parts = rel_path.split(os.sep)
@@ -250,8 +248,31 @@ def load_test_scenarios(labeled_path: str, ingested_prefixes: set = None) -> lis
                 elif "해석례" in category_display:
                     category_display = "법률 해석례"
                     
-                question = (label.get("input") or label.get("instruction") or label.get("question") or "").strip()
-                expected_answer = (label.get("output") or label.get("answer") or "").strip()
+                # Distinguish by folder name (civil vs criminal vs others)
+                is_civil = "민사" in dir_path or "civil" in dir_path.lower()
+                is_criminal = "형사" in dir_path or "criminal" in dir_path.lower()
+                
+                if is_civil:
+                    # Civil Law schema
+                    label = data.get("taskinfo") or {}
+                    info = data.get("info") or {}
+                    question = (label.get("input") or label.get("instruction") or "").strip()
+                    expected_answer = (label.get("output") or "").strip()
+                    case_name = info.get("casenames") or info.get("caseName") or "알 수 없음"
+                elif is_criminal:
+                    # Criminal Law schema
+                    label = data.get("label") or {}
+                    info = data.get("info") or {}
+                    question = (label.get("input") or label.get("instruction") or label.get("question") or "").strip()
+                    expected_answer = (label.get("output") or label.get("answer") or "").strip()
+                    case_name = info.get("caseName") or label.get("lawName") or info.get("lawName") or info.get("title") or "알 수 없음"
+                else:
+                    # Fallback / General Law schema (if folder has neither civil nor criminal)
+                    label = data.get("label") or data.get("taskinfo") or {}
+                    info = data.get("info") or {}
+                    question = (label.get("input") or label.get("instruction") or label.get("question") or data.get("input") or data.get("instruction") or "").strip()
+                    expected_answer = (label.get("output") or label.get("answer") or data.get("output") or data.get("answer") or "").strip()
+                    case_name = info.get("caseName") or label.get("lawName") or info.get("lawName") or info.get("title") or info.get("casenames") or "알 수 없음"
                 
                 # If question is empty, print warning and some debug info about the JSON structure
                 if not question:
@@ -259,10 +280,12 @@ def load_test_scenarios(labeled_path: str, ingested_prefixes: set = None) -> lis
                     print(f"   [JSON 루트 Key]: {list(data.keys())}")
                     if "label" in data:
                         print(f"   [label 내부 Key]: {list(data['label'].keys()) if isinstance(data['label'], dict) else data['label']}")
+                    elif "taskinfo" in data:
+                        print(f"   [taskinfo 내부 Key]: {list(data['taskinfo'].keys()) if isinstance(data['taskinfo'], dict) else data['taskinfo']}")
                     
                 scenarios.append({
                     "category": category_display,
-                    "case_name": info.get("caseName") or label.get("lawName") or info.get("lawName") or info.get("title") or "알 수 없음",
+                    "case_name": case_name,
                     "question": question,
                     "expected_answer": expected_answer
                 })
