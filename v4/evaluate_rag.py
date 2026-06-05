@@ -178,14 +178,46 @@ def load_test_scenarios(labeled_path: str, ingested_prefixes: set = None) -> lis
         # Skip validation or wait folders
         if "validation" in root.lower():
             continue
-        if "02.라벨링데이터" in root or "_QA" in root:
+        if "02.라벨링데이터" in root or "_QA" in root or "질의응답" in root:
             for file in files:
-                if "_QA_" in file and file.endswith(".json"):
-                    prefix = file.split("_QA_")[0]
-                    # Filter: only evaluate files that have matching ingested prefixes in the DB
-                    if ingested_prefixes is not None and prefix not in ingested_prefixes:
-                        continue
-                    qa_files_by_dir[root].append(os.path.join(root, file))
+                if file.endswith(".json") and ("_QA" in file or "질의응답" in file):
+                    # Check prefix match dynamically
+                    matched = False
+                    base = os.path.splitext(file)[0]
+                    
+                    # 1. Try stripping QA suffix
+                    # e.g., TS_법령_민법_QA_0001 -> TS_법령_민법
+                    for sep in ["_QA_", "_QA", "_질의응답_", "_질의응답"]:
+                        if sep in base:
+                            prefix = base.split(sep)[0]
+                            if ingested_prefixes is None or prefix in ingested_prefixes:
+                                matched = True
+                                break
+                                
+                    # 2. Try replacing QA tag with separator or empty string
+                    # e.g., 민사법_판결문_질의응답_1 -> 민사법_판결문_1
+                    if not matched:
+                        for sep in ["_QA_", "_질의응답_"]:
+                            if sep in base:
+                                prefix = base.replace(sep, "_")
+                                if ingested_prefixes is None or prefix in ingested_prefixes:
+                                    matched = True
+                                    break
+                                    
+                    if not matched:
+                        for sep in ["_QA", "_질의응답"]:
+                            if sep in base:
+                                prefix = base.replace(sep, "")
+                                if ingested_prefixes is None or prefix in ingested_prefixes:
+                                    matched = True
+                                    break
+                                    
+                    # 3. Try direct match
+                    if not matched and (ingested_prefixes is None or base in ingested_prefixes):
+                        matched = True
+                        
+                    if matched:
+                        qa_files_by_dir[root].append(os.path.join(root, file))
                     
     # Collect all available QA files and round-robin sample to get a balanced representation
     all_file_paths = []
@@ -261,7 +293,12 @@ def run_evaluation():
         conn.close()
     except Exception as e:
         print(f"⚠️ ingested_prefixes 로드 중 오류 발생: {e}")
-    print(f" -> DB에 적재 완료된 소스 파일 prefix 수: {len(ingested_prefixes):,}개")
+        
+    if not ingested_prefixes:
+        print("⚠️ DB에서 file_prefix 메타데이터를 찾을 수 없습니다. DB 필터링을 해제하고 모든 라벨링 데이터를 탐색합니다.")
+        ingested_prefixes = None
+    else:
+        print(f" -> DB에 적재 완료된 소스 파일 prefix 수: {len(ingested_prefixes):,}개")
     
     guardrail_agent = GuardrailAgent()
     llm_agent = LLMAgent()
