@@ -101,6 +101,15 @@ class LLMAgent:
         try:
             import time
             import re
+            
+            # Print/log the final prompt sent to the LLM for debugging/visibility
+            print("\n" + "="*80)
+            print("[디버그 - LLM에 전달되는 최종 프롬프트]")
+            print("="*80)
+            print(f"--- SYSTEM PROMPT ---\n{system_prompt}\n")
+            print(f"--- HUMAN CONTENT ---\n{human_content}")
+            print("="*80 + "\n")
+            
             print("[2차 방어막] LLM 추론 시작...")
             t0 = time.time()
             response = self.llm.invoke(messages)

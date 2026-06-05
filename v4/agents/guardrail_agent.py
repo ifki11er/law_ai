@@ -157,7 +157,13 @@ class GuardrailAgent:
             
             is_search_required = bool(result.get("is_search_required", True))
             category = str(result.get("category", "law_ruling"))
-            expanded_query = str(result.get("expanded_query", query))
+            llm_expanded = str(result.get("expanded_query", ""))
+            
+            # Combine the original detailed query with the LLM's expanded keywords to prevent loss of critical facts
+            if llm_expanded:
+                expanded_query = f"{query} {llm_expanded}".strip()
+            else:
+                expanded_query = query
             
             print(f"[통합 질문 분석] 완료: is_legal=True, is_search_required={is_search_required}, category={category}, query='{expanded_query}'")
             return {
