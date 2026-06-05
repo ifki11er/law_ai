@@ -130,12 +130,19 @@ class LLMAgent:
                         "snippet": doc.page_content[:150] + "..." if len(doc.page_content) > 150 else doc.page_content
                     })
 
-            # Check if LLM generated response but couldn't find answer, double check standard refusal
-            # If the output indicates it cannot answer, align it to standard refusal
-            refusal_indicators = ["알 수 없", "찾을 수 없", "답변이 불가능", "근거가 존재하지", "명시되어 있지", "언급되어 있지", "확인할 수 없"]
-            if any(ind in answer for ind in refusal_indicators) and len(answer) < 120:
+            # 2차 방어막 강화: 질문에 검색이 필요했고 참고 문서가 주어졌음에도, 
+            # 답변에서 단 하나의 출처도 인용하지 못했다면 이는 DB 근거 없는 환각(Hallucination)으로 간주하고 답변을 거부합니다.
+            if is_search_required and filtered_docs and not cited_indices:
+                print("[2차 방어막] 경고: 답변 내 인용 출처([출처 X]) 누락 감지. 환각으로 판정하여 답변을 강제 거부합니다.")
                 answer = self.standard_refusal
                 sources = []
+            else:
+                # Check if LLM generated response but couldn't find answer, double check standard refusal
+                # If the output indicates it cannot answer, align it to standard refusal
+                refusal_indicators = ["알 수 없", "찾을 수 없", "답변이 불가능", "근거가 존재하지", "명시되어 있지", "언급되어 있지", "확인할 수 없"]
+                if any(ind in answer for ind in refusal_indicators) and len(answer) < 120:
+                    answer = self.standard_refusal
+                    sources = []
 
             return {
                 "answer": answer,
